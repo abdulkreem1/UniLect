@@ -1,0 +1,67 @@
+# Production-like stack for local verification:
+#   docker compose -f deploy/docker-compose.stack.yml up -d --build
+# API through nginx at http://127.0.0.1:8080 ; captured emails at http://127.0.0.1:8025
+name: unilect-stack
+
+x-api-env: &api-env
+  SECRET_KEY: ${STACK_SECRET_KEY:-local-stack-only-not-a-real-secret-change-me-0123456789}
+  ALLOWED_HOSTS: 127.0.0.1,localhost,api
+  DATABASE_URL: postgres://unilect:${STACK_DB_PASSWORD:-stack-db-pass}@db:5432/unilect
+  CACHE_URL: redis://redis:6379/1
+  EMAIL_URL: smtp://mail:1025
+  DEFAULT_FROM_EMAIL: UniLect <no-reply@unilect.test>
+  PASSWORD_RESET_URL_TEMPLATE: unilect://app/reset-password?uid={uid}&token={token}
+  PRIVATE_MEDIA_ACCEL_PREFIX: /protected-media/
+  SECURE_SSL_REDIRECT: "False"     # local HTTP only; keep the default (True) behind TLS
+  NUM_PROXIES: "1"
+  LOG_FORMAT: json
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: unilect
+      POSTGRES_USER: unilect
+      POSTGRES_PASSWORD: ${STACK_DB_PASSWORD:-stack-db-pass}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unilect -d unilect"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+
+  mail:
+    image: axllent/mailpit:v1.27
+    ports: ["127.0.0.1:8025:8025"]
+
+  migrate:
+    build: { context: .., dockerfile: Dockerfile }
+    environment: *api-env
+    command: python manage.py migrate --noinput
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    build: { context: .., dockerfile: Dockerfile }
+    environment: *api-env
+    volumes:
+      - private_media:/srv/unilect/private_media
+      - static:/srv/unilect/staticfiles
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports: ["127.0.0.1:8080:80"]
+    volumes:
+      - ./nginx.local.conf:/etc/nginx/conf.d/default.conf:ro
+      - private_media:/srv/unilect/private_media:ro
+      - static:/srv/unilect/staticfiles:ro
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  private_media:
+  static:

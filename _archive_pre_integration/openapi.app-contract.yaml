@@ -1,0 +1,641 @@
+openapi: 3.1.0
+info:
+  title: UniLect API
+  version: 1.0.0
+  description: |
+    Contract authored together with the UniLect mobile app. The app talks to this
+    contract only. Until the production server exists, the app ships a dev-only
+    in-memory implementation (`lib/dev/fake_backend`) that follows this document.
+
+    ## Conventions
+    - Base path: `/api/v1`. JSON uses camelCase. Timestamps are ISO-8601 UTC.
+    - Every request from the app carries `X-Device-Id` (the app install ID) and
+      `Accept-Language` (`ar` | `en`).
+    - Every protected request carries `Authorization: Bearer <accessToken>`.
+      The server MUST verify on every protected request that the token is valid,
+      not revoked, and (for students) bound to the device in `X-Device-Id` (FR-009).
+    - All permission checks are enforced server-side (FR-077). Students only ever
+      receive `published` content of active structure (FR-079). Library users only
+      ever receive/modify items inside their scope (FR-060).
+    - Files are stored privately and are only served through authenticated
+      streaming endpoints; no permanent/public URL is ever returned (FR-076).
+    - Secrets (passwords, tokens, reset codes) are never logged in clear text (FR-080).
+    - Paged lists: `?page=1&pageSize=20` → `Page<T>`.
+
+    ## Error envelope
+    `{ "error": { "code": "VALIDATION_FAILED", "message": "…", "fields": {"title": "required"}, "details": {} } }`
+
+    | HTTP | code | meaning |
+    |---|---|---|
+    | 400 | VALIDATION_FAILED | `fields` lists invalid fields (FR-078) |
+    | 400 | PROTECTED_FIELD | attempt to change a protected profile field (FR-007) |
+    | 400 | FILE_TYPE_NOT_ALLOWED / FILE_TOO_LARGE | upload validation (FR-043) |
+    | 400 | INVALID_RESET_CODE | wrong/expired reset code or token |
+    | 401 | INVALID_CREDENTIALS | login failed |
+    | 401 | TOKEN_EXPIRED | access token expired → client refreshes once |
+    | 401 | TOKEN_REVOKED | session revoked (logout, device change, disable) (FR-014) |
+    | 403 | ACCOUNT_DISABLED | disabled account (FR-005) |
+    | 403 | DEVICE_NOT_AUTHORIZED | token used from a device not bound to the student (FR-009/013) |
+    | 403 | FORBIDDEN | role lacks permission (FR-006) |
+    | 403 | OUT_OF_SCOPE | library acting outside its scope (FR-039/049/060) |
+    | 404 | NOT_FOUND | also used for content a student may not see |
+    | 409 | DEVICE_MISMATCH | student account bound to another device (FR-010). `details` = `DeviceMismatchDetails` |
+    | 409 | CONFLICT | e.g. duplicate email / student number, request already pending |
+    | 429 | RATE_LIMITED | too many attempts |
+servers:
+  - url: https://api.example.com/api/v1
+    description: Placeholder — set with `--dart-define=API_BASE_URL=…`
+
+security:
+  - bearer: []
+
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+  parameters:
+    DeviceId: { name: X-Device-Id, in: header, required: true, schema: { type: string } }
+    Id: { name: id, in: path, required: true, schema: { type: string } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+  responses:
+    Error:
+      description: Error envelope
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NoContent: { description: No content }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: string } }
+            details: { type: object }
+    Page:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items: { type: array, items: {} }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+    Role: { type: string, enum: [student, library, admin] }
+    AccountStatus: { type: string, enum: [active, disabled] }
+    LibraryScope:
+      type: object
+      properties:
+        universityIds: { type: array, items: { type: string } }
+        facultyIds: { type: array, items: { type: string } }
+    User:
+      type: object
+      required: [id, publicCode, role, fullName, email, status, createdAt]
+      properties:
+        id: { type: string }
+        publicCode: { type: string, description: Non-sensitive identifier used for watermarking (FR-057) }
+        role: { $ref: '#/components/schemas/Role' }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        studentNumber: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/AccountStatus' }
+        scope: { oneOf: [ { $ref: '#/components/schemas/LibraryScope' }, { type: 'null' } ] }
+        boundDevice: { oneOf: [ { $ref: '#/components/schemas/DeviceInfo' }, { type: 'null' } ], description: Admin views only }
+        createdAt: { type: string, format: date-time }
+    DeviceInfo:
+      type: object
+      required: [installId, platform]
+      properties:
+        installId: { type: string, description: Masked (e.g. "…9f3a") in responses }
+        platform: { type: string, enum: [android, ios] }
+        model: { type: string }
+    Session:
+      type: object
+      required: [accessToken, refreshToken, expiresAt, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+    DeviceMismatchDetails:
+      type: object
+      required: [ticket, ticketExpiresAt]
+      properties:
+        ticket: { type: string, description: Short-lived (15 min) proof of valid credentials, only usable to file a device-change request }
+        ticketExpiresAt: { type: string, format: date-time }
+        pendingRequest: { oneOf: [ { $ref: '#/components/schemas/DeviceChangeRequest' }, { type: 'null' } ] }
+    DeviceChangeStatus: { type: string, enum: [pending, approved, rejected] }
+    ActorRef:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, role: { $ref: '#/components/schemas/Role' } }
+    DeviceChangeRequest:
+      type: object
+      required: [id, userId, userName, status, newDevice, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        userName: { type: string }
+        studentNumber: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/DeviceChangeStatus' }
+        reason: { type: [string, 'null'] }
+        oldDevice: { oneOf: [ { $ref: '#/components/schemas/DeviceInfo' }, { type: 'null' } ] }
+        newDevice: { $ref: '#/components/schemas/DeviceInfo' }
+        createdAt: { type: string, format: date-time }
+        decidedAt: { type: [string, 'null'], format: date-time }
+        decidedBy: { oneOf: [ { $ref: '#/components/schemas/ActorRef' }, { type: 'null' } ] }
+        decisionNote: { type: [string, 'null'] }
+    DeviceLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        userName: { type: string }
+        action: { type: string, enum: [bound, changeRequested, approved, rejected, unbound] }
+        device: { oneOf: [ { $ref: '#/components/schemas/DeviceInfo' }, { type: 'null' } ] }
+        actor: { oneOf: [ { $ref: '#/components/schemas/ActorRef' }, { type: 'null' } ] }
+        note: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    StructureItem:
+      type: object
+      required: [id, name, isActive, sortOrder]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        isActive: { type: boolean }
+        sortOrder: { type: integer }
+    University: { allOf: [ { $ref: '#/components/schemas/StructureItem' } ] }
+    Faculty:
+      allOf:
+        - $ref: '#/components/schemas/StructureItem'
+        - { type: object, required: [universityId], properties: { universityId: { type: string } } }
+    AcademicYear:
+      allOf:
+        - $ref: '#/components/schemas/StructureItem'
+        - { type: object, required: [facultyId, level], properties: { facultyId: { type: string }, level: { type: integer } } }
+    Term: { allOf: [ { $ref: '#/components/schemas/StructureItem' } ] }
+    ExamType: { allOf: [ { $ref: '#/components/schemas/StructureItem' } ] }
+    Specialization:
+      allOf:
+        - $ref: '#/components/schemas/StructureItem'
+        - { type: object, required: [facultyId], properties: { facultyId: { type: string } } }
+    Subject:
+      allOf:
+        - $ref: '#/components/schemas/StructureItem'
+        - type: object
+          required: [facultyId, yearId]
+          properties:
+            facultyId: { type: string }
+            yearId: { type: string }
+            code: { type: [string, 'null'] }
+            specializationIds: { type: array, items: { type: string }, description: Empty = common to all specializations }
+    Doctor:
+      allOf:
+        - $ref: '#/components/schemas/StructureItem'
+        - { type: object, properties: { subjectIds: { type: array, items: { type: string } } } }
+    ContentType: { type: string, enum: [lecture, exam] }
+    ContentStatus: { type: string, enum: [draft, pendingReview, published, archived, hidden] }
+    ContentFile:
+      type: object
+      required: [mimeType, sizeBytes, version, conversionStatus]
+      properties:
+        mimeType: { type: string, description: Display MIME type — always application/pdf or image/* once ready }
+        sizeBytes: { type: integer }
+        version: { type: integer }
+        originalName: { type: [string, 'null'], description: Manage views only }
+        conversionStatus: { type: string, enum: [ready, pending, failed], description: Word → PDF conversion (FR-054) }
+    Classification:
+      type: object
+      properties:
+        universityId: { type: string }
+        universityName: { type: string }
+        facultyId: { type: string }
+        facultyName: { type: string }
+        yearId: { type: string }
+        yearName: { type: string }
+        subjectName: { type: string }
+        doctorName: { type: [string, 'null'] }
+        termName: { type: [string, 'null'] }
+        examTypeName: { type: [string, 'null'] }
+    Content:
+      type: object
+      required: [id, type, title, status, subjectId, classification, file, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        type: { $ref: '#/components/schemas/ContentType' }
+        title: { type: string }
+        description: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ContentStatus' }
+        subjectId: { type: string }
+        doctorId: { type: [string, 'null'], description: Required for lectures; optional for exams }
+        lectureNumber: { type: [integer, 'null'], description: Lecture order (FR-038) }
+        examYear: { type: [integer, 'null'], description: Required for exams (FR-047) }
+        termId: { type: [string, 'null'], description: Required for exams }
+        examTypeId: { type: [string, 'null'], description: Required for exams (FR-048) }
+        classification: { $ref: '#/components/schemas/Classification' }
+        file: { $ref: '#/components/schemas/ContentFile' }
+        isFavorite: { type: boolean, description: Student views only }
+        reviewNote: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        publishedAt: { type: [string, 'null'], format: date-time }
+    ContentVersion:
+      type: object
+      properties:
+        version: { type: integer }
+        originalName: { type: string }
+        sizeBytes: { type: integer }
+        uploadedAt: { type: string, format: date-time }
+        uploadedBy: { $ref: '#/components/schemas/ActorRef' }
+        isCurrent: { type: boolean }
+    ContentStats:
+      type: object
+      properties: { published: { type: integer }, draft: { type: integer }, pendingReview: { type: integer }, archived: { type: integer }, hidden: { type: integer } }
+    ClientConfig:
+      type: object
+      properties:
+        maxUploadSizeMb: { type: integer }
+        allowedExtensions: { type: array, items: { type: string } }
+        requireContentReview: { type: boolean }
+        watermarkEnabled: { type: boolean }
+        screenCaptureProtection: { type: boolean }
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [deviceChangeApproved, deviceChangeRejected, newContent, contentReviewed, reportUpdated, system] }
+        title: { type: string }
+        body: { type: string }
+        isRead: { type: boolean }
+        data: { type: object, additionalProperties: { type: string } }
+        createdAt: { type: string, format: date-time }
+    ReportStatus: { type: string, enum: [open, inReview, resolved, dismissed] }
+    ContentReport:
+      type: object
+      properties:
+        id: { type: string }
+        contentId: { type: string }
+        contentTitle: { type: string }
+        reason: { type: string, enum: [wrongFile, duplicate, inappropriate, other] }
+        note: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/ReportStatus' }
+        reporter: { $ref: '#/components/schemas/ActorRef' }
+        createdAt: { type: string, format: date-time }
+        history:
+          type: array
+          items:
+            type: object
+            properties: { status: { $ref: '#/components/schemas/ReportStatus' }, note: { type: [string, 'null'] }, actor: { $ref: '#/components/schemas/ActorRef' }, at: { type: string, format: date-time } }
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: user.disabled }
+        actor: { $ref: '#/components/schemas/ActorRef' }
+        entityType: { type: string, enum: [user, content, structure, device, settings, report] }
+        entityId: { type: string }
+        entityLabel: { type: string }
+        createdAt: { type: string, format: date-time }
+    Dashboard:
+      type: object
+      properties:
+        users: { type: object, properties: { students: { type: integer }, libraries: { type: integer }, admins: { type: integer }, disabled: { type: integer } } }
+        content: { $ref: '#/components/schemas/ContentStats' }
+        pendingDeviceRequests: { type: integer }
+        pendingReviews: { type: integer }
+        openReports: { type: integer }
+
+paths:
+  # ───────────────────────── Auth (FR-002/003/004/008/010) ─────────────────────────
+  /auth/login:
+    post:
+      security: []
+      summary: Login. For students, binds the first device or rejects a second one.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, device]
+              properties: { email: { type: string }, password: { type: string }, device: { $ref: '#/components/schemas/DeviceInfo' } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /auth/refresh:
+    post:
+      security: []
+      summary: Rotate tokens. The refresh token is single-use and device-bound.
+      requestBody: { content: { application/json: { schema: { type: object, required: [refreshToken], properties: { refreshToken: { type: string } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Session' } } } }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/logout:
+    post:
+      summary: Revoke the current session (access + refresh token).
+      responses: { '204': { $ref: '#/components/responses/NoContent' } }
+  /auth/password/forgot:
+    post:
+      security: []
+      requestBody: { content: { application/json: { schema: { type: object, required: [email], properties: { email: { type: string } } } } } }
+      responses: { '202': { description: Always accepted (no account enumeration) } }
+  /auth/password/verify-code:
+    post:
+      security: []
+      requestBody: { content: { application/json: { schema: { type: object, required: [email, code], properties: { email: { type: string }, code: { type: string } } } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { resetToken: { type: string } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+  /auth/password/reset:
+    post:
+      security: []
+      summary: Set a new password; revokes all sessions of the user.
+      requestBody: { content: { application/json: { schema: { type: object, required: [resetToken, newPassword], properties: { resetToken: { type: string }, newPassword: { type: string, minLength: 8 } } } } } }
+      responses: { '204': { $ref: '#/components/responses/NoContent' }, '400': { $ref: '#/components/responses/Error' } }
+
+  # ───────────────────────── Me / profile (FR-007/034/071) ─────────────────────────
+  /me:
+    get:
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } }
+    patch:
+      summary: Update allowed fields only (fullName, phone). Other fields → PROTECTED_FIELD.
+      requestBody: { content: { application/json: { schema: { type: object, properties: { fullName: { type: string }, phone: { type: [string, 'null'] } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '400': { $ref: '#/components/responses/Error' } }
+  /me/password:
+    post:
+      requestBody: { content: { application/json: { schema: { type: object, required: [currentPassword, newPassword], properties: { currentPassword: { type: string }, newPassword: { type: string } } } } } }
+      responses: { '204': { $ref: '#/components/responses/NoContent' }, '400': { $ref: '#/components/responses/Error' } }
+  /me/favorites:
+    get:
+      summary: Student favorites (published content only).
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Content' } } } } } }
+  /me/favorites/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    put: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+    delete: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+  /me/followed-subjects:
+    get: { responses: { '200': { description: Subject IDs, content: { application/json: { schema: { type: array, items: { type: string } } } } } } }
+  /me/followed-subjects/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    put: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+    delete: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+  /config:
+    get:
+      summary: Client-relevant settings (any authenticated role).
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClientConfig' } } } } }
+
+  # ───────────────────────── Device change (FR-011) ─────────────────────────
+  /device-change-requests:
+    post:
+      security: []
+      summary: File a device-change request using the ticket from DEVICE_MISMATCH. Creates a `pending` request; 409 if one is already pending.
+      requestBody: { content: { application/json: { schema: { type: object, required: [ticket], properties: { ticket: { type: string }, reason: { type: [string, 'null'], maxLength: 500 } } } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/DeviceChangeRequest' } } } }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+
+  # ───────────────────────── Structure — read (FR-024..028) ─────────────────────────
+  # Students: active items only, ordered by sortOrder. Library: items within scope.
+  /universities: { get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/University' } } } } } } } }
+  /universities/{id}/faculties:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Faculty' } } } } } } }
+  /faculties/{id}/years:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AcademicYear' } } } } } } }
+  /faculties/{id}/specializations:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Specialization' } } } } } } }
+  /years/{id}/subjects:
+    parameters: [ { $ref: '#/components/parameters/Id' }, { name: specializationId, in: query, schema: { type: string } } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Subject' } } } } } } }
+  /subjects/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Subject' } } } } } }
+  /subjects/{id}/doctors:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Doctor' } } } } } } }
+  /terms: { get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Term' } } } } } } } }
+  /exam-types: { get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ExamType' } } } } } } } }
+
+  # ───────────────────────── Content — student (FR-029..034, 050..056) ─────────────────────────
+  /subjects/{id}/lectures:
+    parameters: [ { $ref: '#/components/parameters/Id' }, { name: doctorId, in: query, schema: { type: string } } ]
+    get:
+      summary: Published lectures ordered by lectureNumber, then createdAt.
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Content' } } } } } }
+  /subjects/{id}/exams:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: examYear, in: query, schema: { type: integer } }
+      - { name: termId, in: query, schema: { type: string } }
+      - { name: examTypeId, in: query, schema: { type: string } }
+      - { name: doctorId, in: query, schema: { type: string } }
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Content' } } } } } } }
+  /content/search:
+    get:
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ContentType' } }
+        - { name: universityId, in: query, schema: { type: string } }
+        - { name: facultyId, in: query, schema: { type: string } }
+        - { name: yearId, in: query, schema: { type: string } }
+        - { name: subjectId, in: query, schema: { type: string } }
+        - { name: doctorId, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses: { '200': { description: Page<Content>, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+  /content/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } }, '404': { $ref: '#/components/responses/Error' } } }
+  /content/{id}/file:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get:
+      summary: Stream the current approved file for in-app viewing (FR-051..056).
+      description: |
+        Verifies identity, role, device binding and publish state on every call.
+        Responds with `Content-Disposition: inline`, `Cache-Control: no-store`.
+      responses:
+        '200': { description: File bytes, content: { application/pdf: {}, image/*: {} } }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /content/{id}/reports:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      summary: Report content (FR-073)
+      requestBody: { content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, enum: [wrongFile, duplicate, inappropriate, other] }, note: { type: [string, 'null'] } } } } } }
+      responses: { '201': { description: Created } }
+
+  # ───────────────────────── Content — manage (library in scope / admin all) ─────────────────────────
+  /manage/content:
+    get:
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ContentType' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ContentStatus' } }
+        - { name: subjectId, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses: { '200': { description: Page<Content>, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+    post:
+      summary: Create content with file (FR-035..038, 043, 045..048, 078)
+      description: |
+        `status` may be `draft` or `published`. When `requireContentReview` is on,
+        a library's `published` becomes `pendingReview`. Publishing requires all
+        mandatory fields of the content type.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, type, title, subjectId, status]
+              properties:
+                file: { type: string, format: binary }
+                type: { $ref: '#/components/schemas/ContentType' }
+                title: { type: string }
+                description: { type: string }
+                subjectId: { type: string }
+                doctorId: { type: string }
+                lectureNumber: { type: integer }
+                examYear: { type: integer }
+                termId: { type: string }
+                examTypeId: { type: string }
+                status: { type: string, enum: [draft, published] }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' } }
+  /manage/content/stats:
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentStats' } } } } } }
+  /manage/content/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } } } }
+    patch:
+      summary: Edit metadata and/or status (draft|published|archived; admin also hidden).
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } }, '400': { $ref: '#/components/responses/Error' }, '403': { $ref: '#/components/responses/Error' } }
+    delete: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+  /manage/content/{id}/file:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { summary: Preview stream for managers (FR-044), responses: { '200': { description: bytes } } }
+    post:
+      summary: Replace file; creates a new version, metadata kept (FR-041)
+      requestBody: { content: { multipart/form-data: { schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } } }
+  /manage/content/{id}/versions:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ContentVersion' } } } } } } }
+
+  # ───────────────────────── Admin ─────────────────────────
+  /admin/dashboard:
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } } } }
+  /admin/users:
+    get:
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { $ref: '#/components/schemas/Role' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AccountStatus' } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses: { '200': { description: Page<User>, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+    post:
+      summary: Create account (FR-001, 005, 059, 060). studentNumber required for students; scope required for libraries.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, fullName, email, initialPassword]
+              properties:
+                role: { $ref: '#/components/schemas/Role' }
+                fullName: { type: string }
+                email: { type: string }
+                studentNumber: { type: string }
+                phone: { type: string }
+                initialPassword: { type: string, minLength: 8 }
+                scope: { $ref: '#/components/schemas/LibraryScope' }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }, '400': { $ref: '#/components/responses/Error' }, '409': { $ref: '#/components/responses/Error' } }
+  /admin/users/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } } }
+    patch:
+      summary: Edit fullName, email, studentNumber, phone, scope.
+      requestBody: { content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } }
+  /admin/users/{id}/disable:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { summary: Disable and revoke all sessions, responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } } }
+  /admin/users/{id}/enable:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } } } }
+  /admin/device-change-requests:
+    get:
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/DeviceChangeStatus' } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, oldest], default: newest } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DeviceChangeRequest' } } } } } }
+  /admin/device-change-requests/{id}/approve:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      summary: Approve — unbinds old device, binds new device, revokes old sessions, logs, notifies (FR-012..015, 070).
+      requestBody: { content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DeviceChangeRequest' } } } } }
+  /admin/device-change-requests/{id}/reject:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      requestBody: { content: { application/json: { schema: { type: object, properties: { note: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DeviceChangeRequest' } } } } }
+  /admin/device-logs:
+    get:
+      parameters: [ { name: userId, in: query, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { description: Page<DeviceLogEntry>, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+  /admin/structure/{kind}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { type: string, enum: [universities, faculties, years, terms, specializations, subjects, doctors, exam-types] } }
+      - { name: parentId, in: query, schema: { type: string }, description: universityId for faculties; facultyId for years/specializations/subjects; subjectId for doctors }
+    get: { summary: All items incl. inactive (FR-016..022), responses: { '200': { description: OK } } }
+    post: { summary: Create item. Parent references are validated (FR-017), responses: { '201': { description: Created }, '400': { $ref: '#/components/responses/Error' } } }
+  /admin/structure/{kind}/{id}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { type: string } }
+      - { $ref: '#/components/parameters/Id' }
+    patch: { summary: Edit item / toggle isActive, responses: { '200': { description: OK } } }
+  /admin/structure/{kind}/reorder:
+    parameters: [ { name: kind, in: path, required: true, schema: { type: string } } ]
+    post:
+      summary: Persist display order (FR-023)
+      requestBody: { content: { application/json: { schema: { type: object, required: [ids], properties: { ids: { type: array, items: { type: string } } } } } } }
+      responses: { '204': { $ref: '#/components/responses/NoContent' } }
+  /admin/content/{id}/review:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post:
+      summary: Approve or reject pending content (FR-066)
+      requestBody: { content: { application/json: { schema: { type: object, required: [decision], properties: { decision: { type: string, enum: [approve, reject] }, note: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Content' } } } } }
+  /admin/audit-logs:
+    get:
+      parameters: [ { name: entityType, in: query, schema: { type: string } }, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { description: Page<AuditLogEntry>, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+  /admin/settings:
+    get: { responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClientConfig' } } } } } }
+    put:
+      summary: Update settings; applied to subsequent operations only (FR-069)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/ClientConfig' } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClientConfig' } } } } }
+  /admin/reports:
+    get:
+      parameters: [ { name: status, in: query, schema: { $ref: '#/components/schemas/ReportStatus' } } ]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ContentReport' } } } } } }
+  /admin/reports/{id}:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    patch:
+      requestBody: { content: { application/json: { schema: { type: object, required: [status], properties: { status: { $ref: '#/components/schemas/ReportStatus' }, note: { type: string } } } } } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ContentReport' } } } } }
+
+  # ───────────────────────── Notifications (FR-070..072) ─────────────────────────
+  /notifications:
+    get:
+      parameters: [ { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' } ]
+      responses: { '200': { description: Page<Notification> plus `unreadCount`, content: { application/json: { schema: { $ref: '#/components/schemas/Page' } } } } }
+  /notifications/{id}/read:
+    parameters: [ { $ref: '#/components/parameters/Id' } ]
+    post: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }
+  /notifications/read-all:
+    post: { responses: { '204': { $ref: '#/components/responses/NoContent' } } }

@@ -1,0 +1,35 @@
+[project]
+name = "unilect-backend"
+version = "1.0.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["**/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S", "C4", "SIM", "RUF"]
+ignore = ["RUF012", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S105", "S106", "S311", "RUF001", "RUF002", "RUF003"]
+# Arabic letters are the subject of this module, not look-alike typos.
+"apps/core/text.py" = ["RUF001", "RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "unilect.settings.test"
+python_files = ["test_*.py"]
+addopts = "--strict-markers --reuse-db"
+filterwarnings = ["ignore::DeprecationWarning:pkg_resources"]
+
+[tool.coverage.run]
+source = ["apps", "unilect"]
+branch = true
+omit = ["*/migrations/*", "unilect/wsgi.py", "unilect/asgi.py", "unilect/settings/dev.py", "unilect/settings/prod.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 95
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

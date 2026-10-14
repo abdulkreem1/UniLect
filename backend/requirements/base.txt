@@ -1,0 +1,14 @@
+# Runtime dependencies (pinned to tested versions).
+Django==5.2.18                      # LTS (security support until April 2028)
+djangorestframework==3.16.1         # REST framework
+djangorestframework_simplejwt==5.5.1  # Signed JWT access/refresh tokens (revocation handled by AuthSession)
+drf-spectacular==0.30.0             # OpenAPI 3 schema + Swagger UI generated from code
+django-filter==26.2                 # Declarative query filtering
+django-environ==0.14.0              # 12-factor configuration from environment / .env
+django-cors-headers==4.9.0          # CORS for the web dashboard origin(s)
+psycopg[binary]==3.3.6              # PostgreSQL driver
+filetype==1.2.0                     # Magic-byte file type detection (pure Python, no libmagic)
+pillow==12.3.0                      # Image verification
+pypdf==6.20.0                       # PDF structure check + page count
+redis==6.2.0                        # Client for the shared cache (CACHE_URL=redis://...)
+gunicorn==23.0.0 ; sys_platform != "win32"   # Production WSGI server (Linux)

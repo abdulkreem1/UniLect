@@ -1,0 +1,316 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-11 23:34+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 && n%100<=10 ? 3 : n%100>=11 ? 4 : 5;\n"
+
+msgid "Semester must belong to the course's faculty."
+msgstr "يجب أن ينتمي الفصل الدراسي إلى كلية المادة."
+
+msgid "Semester must belong to the course faculty."
+msgstr "يجب أن ينتمي الفصل الدراسي إلى كلية المادة."
+
+msgid "Specializations must belong to the course faculty."
+msgstr "يجب أن تنتمي الاختصاصات إلى كلية المادة."
+
+msgid "Instructor belongs to a different university."
+msgstr "الدكتور يتبع جامعة أخرى."
+
+msgid "Instructor is already linked to this course."
+msgstr "الدكتور مرتبط بهذه المادة مسبقاً."
+
+msgid ""
+"This account is bound to another device. Submit a device change request."
+msgstr "هذا الحساب مرتبط بجهاز آخر. يُرجى تقديم طلب تغيير الجهاز."
+
+msgid "You must change your password before continuing."
+msgstr "يجب تغيير كلمة المرور قبل المتابعة."
+
+msgid "Token is invalid or expired."
+msgstr "رمز الدخول غير صالح أو منتهي الصلاحية."
+
+msgid "Your session has ended. Please sign in again."
+msgstr "انتهت جلستك. يُرجى تسجيل الدخول مجدداً."
+
+msgid "This account is disabled."
+msgstr "هذا الحساب معطّل."
+
+msgid "Provide either an email or a student number, not both."
+msgstr "أدخل البريد الإلكتروني أو الرقم الجامعي، وليس كليهما."
+
+msgid "University is required with a student number."
+msgstr "يجب تحديد الجامعة عند استخدام الرقم الجامعي."
+
+msgid "This field cannot be modified."
+msgstr "لا يمكن تعديل هذا الحقل."
+
+msgid "A user with this email already exists."
+msgstr "يوجد مستخدم بهذا البريد الإلكتروني مسبقاً."
+
+msgid "This field is required."
+msgstr "هذا الحقل مطلوب."
+
+msgid "Use the set-password action."
+msgstr "استخدم إجراء تعيين كلمة المرور."
+
+msgid "You cannot change your own role."
+msgstr "لا يمكنك تغيير دورك بنفسك."
+
+msgid "Required for students."
+msgstr "مطلوب لحسابات الطلاب."
+
+msgid "Required for library accounts."
+msgstr "مطلوب لحسابات المكتبات."
+
+msgid "This student number already exists in this university."
+msgstr "هذا الرقم الجامعي موجود مسبقاً في هذه الجامعة."
+
+msgid "You cannot deactivate your own account."
+msgstr "لا يمكنك تعطيل حسابك بنفسك."
+
+msgid "Current password is incorrect."
+msgstr "كلمة المرور الحالية غير صحيحة."
+
+msgid "UniLect password reset"
+msgstr "إعادة تعيين كلمة المرور في UniLect"
+
+#, python-format
+msgid ""
+"A password reset was requested for your UniLect account.\n"
+"\n"
+"Open this link to choose a new password (valid for %(minutes)s minutes):\n"
+"%(link)s\n"
+"\n"
+"If you did not request this, ignore this email."
+msgstr ""
+"تم طلب إعادة تعيين كلمة المرور لحسابك في UniLect.\n"
+"\n"
+"افتح الرابط التالي لاختيار كلمة مرور جديدة (صالح لمدة %(minutes)s دقيقة):\n"
+"%(link)s\n"
+"\n"
+"إذا لم تطلب ذلك، تجاهل هذه الرسالة."
+
+msgid "The reset link is invalid or has expired."
+msgstr "رابط إعادة التعيين غير صالح أو منتهي الصلاحية."
+
+msgid "The email/student number or password is incorrect."
+msgstr "البريد الإلكتروني/الرقم الجامعي أو كلمة المرور غير صحيحة."
+
+msgid "This account is disabled. Contact the administrator."
+msgstr "هذا الحساب معطّل. يُرجى التواصل مع مدير النظام."
+
+msgid "This library account is disabled. Contact the administrator."
+msgstr "حساب المكتبة هذا معطّل. يُرجى التواصل مع مدير النظام."
+
+msgid "Device information is required for students."
+msgstr "بيانات الجهاز مطلوبة لحسابات الطلاب."
+
+msgid "This account is bound to another device."
+msgstr "هذا الحساب مرتبط بجهاز آخر."
+
+msgid "Too many failed sign-in attempts. Try again later."
+msgstr "محاولات دخول فاشلة كثيرة. حاول لاحقاً."
+
+msgid "Only student accounts are bound to devices."
+msgstr "حسابات الطلاب فقط هي المرتبطة بالأجهزة."
+
+#, python-format
+msgid "Cannot exceed %(n)s MB."
+msgstr "لا يمكن تجاوز %(n)s ميغابايت."
+
+msgid "Provide at least one extension."
+msgstr "حدّد امتداداً واحداً على الأقل."
+
+#, python-format
+msgid "Unsupported extensions: %(e)s"
+msgstr "امتدادات غير مدعومة: %(e)s"
+
+msgid "Use the /file/ endpoint to replace the file."
+msgstr "استخدم المسار ‎/file/‎ لاستبدال الملف."
+
+msgid "Not applicable to this content type."
+msgstr "لا ينطبق على هذا النوع من المحتوى."
+
+msgid "This course is outside your library's scope."
+msgstr "هذه المادة خارج نطاق مكتبتك."
+
+msgid "This instructor is not linked to the selected course."
+msgstr "هذا الدكتور غير مرتبط بالمادة المختارة."
+
+msgid "This category is disabled."
+msgstr "هذا التصنيف معطّل."
+
+msgid "This exam type is disabled."
+msgstr "نوع الدورة هذا معطّل."
+
+msgid "Required before publishing."
+msgstr "مطلوب قبل النشر."
+
+msgid "Upload a file before publishing."
+msgstr "ارفع ملفاً قبل النشر."
+
+msgid "The content is missing required information."
+msgstr "المحتوى تنقصه بيانات إلزامية."
+
+msgid "Only library accounts can upload content."
+msgstr "يمكن لحسابات المكتبات فقط رفع المحتوى."
+
+msgid "The content type cannot be changed."
+msgstr "لا يمكن تغيير نوع المحتوى."
+
+msgid "Restore the content before replacing its file."
+msgstr "استعد المحتوى من الأرشيف قبل استبدال ملفه."
+
+#, python-format
+msgid "Not allowed while the content is '%(status)s'."
+msgstr "غير مسموح بينما حالة المحتوى «%(status)s»."
+
+msgid "Your content was approved and published."
+msgstr "تمت الموافقة على المحتوى ونشره."
+
+msgid "Your content was returned for changes."
+msgstr "أُعيد المحتوى لإجراء تعديلات."
+
+#, python-format
+msgid "Content review: %(title)s"
+msgstr "مراجعة المحتوى: %(title)s"
+
+#, python-format
+msgid "New content in %(course)s"
+msgstr "محتوى جديد في %(course)s"
+
+msgid ""
+"Office documents are not supported yet. Please convert the file to PDF and "
+"upload it again."
+msgstr ""
+"ملفات Office غير مدعومة حالياً. يُرجى تحويل الملف إلى PDF ثم رفعه مجدداً."
+
+#, python-format
+msgid "File type '.%(ext)s' is not allowed. Allowed types: %(allowed)s."
+msgstr "نوع الملف ‎.%(ext)s‎ غير مسموح. الأنواع المسموحة: %(allowed)s."
+
+msgid "The file is empty."
+msgstr "الملف فارغ."
+
+#, python-format
+msgid "The file exceeds the maximum size of %(mb)s MB."
+msgstr "حجم الملف يتجاوز الحد الأقصى البالغ %(mb)s ميغابايت."
+
+msgid "The file content does not match its extension or the file is damaged."
+msgstr "محتوى الملف لا يطابق امتداده أو أن الملف تالف."
+
+msgid "Password-protected PDF files are not supported."
+msgstr "ملفات PDF المحمية بكلمة مرور غير مدعومة."
+
+msgid "The PDF file could not be read."
+msgstr "تعذّرت قراءة ملف PDF."
+
+msgid "The PDF file has no pages."
+msgstr "ملف PDF لا يحتوي على صفحات."
+
+#, python-format
+msgid "The PDF has too many pages (maximum %(n)s)."
+msgstr "عدد صفحات ملف PDF كبير جداً (الحد الأقصى %(n)s)."
+
+msgid "The image dimensions are too large."
+msgstr "أبعاد الصورة كبيرة جداً."
+
+msgid "The image file could not be read."
+msgstr "تعذّرت قراءة ملف الصورة."
+
+msgid "Must be a JSON array."
+msgstr "يجب أن تكون مصفوفة JSON."
+
+msgid "Must be a non-empty JSON array."
+msgstr "يجب أن تكون مصفوفة JSON غير فارغة."
+
+#, python-format
+msgid "At most %(n)s items per request."
+msgstr "الحد الأقصى %(n)s عنصراً في الطلب الواحد."
+
+msgid "Item must be an object."
+msgstr "يجب أن يكون العنصر كائناً."
+
+msgid "The request could not be processed."
+msgstr "تعذّرت معالجة الطلب."
+
+msgid "The request conflicts with the current state of the resource."
+msgstr "يتعارض الطلب مع الحالة الحالية للمورد."
+
+msgid "This action is not allowed in the current state."
+msgstr "هذا الإجراء غير مسموح في الحالة الحالية."
+
+msgid ""
+"This item is referenced by other records and cannot be deleted. Deactivate "
+"it instead."
+msgstr "هذا العنصر مرتبط بسجلات أخرى ولا يمكن حذفه. قم بتعطيله بدلاً من ذلك."
+
+msgid "Invalid input."
+msgstr "مدخلات غير صالحة."
+
+msgid "Request failed."
+msgstr "فشل الطلب."
+
+msgid ""
+"Keywords (all must match). Arabic letter variants and diacritics are "
+"ignored."
+msgstr ""
+"كلمات البحث (يجب أن تتطابق جميعها). يتم تجاهل اختلاف أشكال الحروف والتشكيل."
+
+msgid ""
+"This account is already linked to another device. You can submit a device "
+"change request from this device; an administrator will review it."
+msgstr ""
+"هذا الحساب مرتبط بجهاز آخر. يمكنك تقديم طلب تغيير الجهاز من هذا الجهاز، "
+"وسيراجعه مدير النظام."
+
+msgid ""
+"No device is currently linked to this account. Sign in again to link this "
+"device."
+msgstr ""
+"لا يوجد جهاز مرتبط بهذا الحساب حالياً. سجّل الدخول مجدداً لربط هذا الجهاز."
+
+msgid "This device is already linked to the account."
+msgstr "هذا الجهاز مرتبط بالحساب مسبقاً."
+
+msgid "A device change request is already pending."
+msgstr "يوجد طلب تغيير جهاز قيد المراجعة مسبقاً."
+
+msgid "This request has already been processed."
+msgstr "تمت معالجة هذا الطلب مسبقاً."
+
+msgid "Device change approved"
+msgstr "تمت الموافقة على تغيير الجهاز"
+
+msgid "Your new device has been linked. Please sign in on it."
+msgstr "تم ربط جهازك الجديد. يُرجى تسجيل الدخول منه."
+
+msgid "Device change rejected"
+msgstr "تم رفض تغيير الجهاز"
+
+msgid "Your device change request was rejected."
+msgstr "تم رفض طلب تغيير الجهاز."
+
+msgid "You already have an open report for this content."
+msgstr "لديك بلاغ مفتوح مسبقاً عن هذا المحتوى."
+
+#, python-format
+msgid "Cannot move a report from %(a)s to %(b)s."
+msgstr "لا يمكن نقل البلاغ من %(a)s إلى %(b)s."
+
+msgid "Your report was reviewed"
+msgstr "تمت مراجعة بلاغك"
